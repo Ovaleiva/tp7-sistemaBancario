@@ -1,0 +1,127 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server kafka:9092 --list || exit 0"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: bank-postgres
+    environment:
+      POSTGRES_DB: bancodb
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d bancodb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: bank-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - kafka-network
+
+  api-service:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "3001:3001"
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_CLIENT_ID=api-service
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=bancodb
+      - DB_USER=admin
+      - DB_PASSWORD=password
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      kafka:
+        condition: service_started
+      postgres:
+        condition: service_started
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
+  orchestrator-service:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.orchestrator
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_CLIENT_ID=orchestrator-service
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=bancodb
+      - DB_USER=admin
+      - DB_PASSWORD=password
+    depends_on:
+      kafka:
+        condition: service_started
+      postgres:
+        condition: service_started
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
+  gateway-service:
+    build:
+      context: ../
+      dockerfile: docker/Dockerfile.gateway
+    ports:
+      - "3002:3002"
+    environment:
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_CLIENT_ID=gateway-service
+    depends_on:
+      - kafka
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
+networks:
+  kafka-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
