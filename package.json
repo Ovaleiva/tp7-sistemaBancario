@@ -1,0 +1,40 @@
+{
+  "name": "sistema-bancario-kafka",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "dev:api": "node api/index.js",
+    "dev:orchestrator": "node orchestrator/index.js",
+    "dev:gateway": "node gateway/index.js",
+    "dev:all": "concurrently \"npm run dev:api\" \"npm run dev:orchestrator\" \"npm run dev:gateway\" \"npm run dev\"",
+    "dev:backend": "concurrently \"npm run dev:api\" \"npm run dev:orchestrator\" \"npm run dev:gateway\"",
+    "setup:kafka": "node scripts/create-topics.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "kafkajs": "^2.2.4",
+    "next": "16.0.1",
+    "pg": "^8.16.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "sequelize": "^6.37.7",
+    "uuid": "^9.0.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "concurrently": "^8.2.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.1",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

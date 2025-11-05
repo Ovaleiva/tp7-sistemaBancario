@@ -1,0 +1,24 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copiar package.json e instalar dependencias
+COPY package*.json ./
+RUN npm install
+
+# Copiar código del frontend
+COPY app/ ./app/
+COPY components/ ./components/
+COPY services/ ./services/
+COPY public/ ./public/
+COPY next.config.js ./
+COPY tailwind.config.js ./
+COPY postcss.config.js ./
+COPY jsconfig.json ./
+
+# Build de la aplicación Next.js
+RUN npm run build
+
+EXPOSE 3000
+
+CMD ["npm", "start"]

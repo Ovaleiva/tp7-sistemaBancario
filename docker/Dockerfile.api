@@ -1,0 +1,15 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copiar package.json e instalar dependencias
+COPY package*.json ./
+RUN npm install
+
+# Copiar código del API
+COPY api/ ./api/
+COPY shared/ ./shared/
+
+EXPOSE 3001
+
+CMD ["node", "api/index.js"]

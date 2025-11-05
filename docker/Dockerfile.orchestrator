@@ -1,0 +1,11 @@
+FROM node:18-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY orchestrator/ ./orchestrator/
+COPY shared/ ./shared/
+
+CMD ["node", "orchestrator/index.js"]
