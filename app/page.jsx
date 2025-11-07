@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import TransactionForm from './components/transactionForm';
 import TransactionTimeline from './components/transactionTimeline';
 import { apiService } from './services/api';
@@ -9,23 +9,128 @@ export default function Home() {
   const [events, setEvents] = useState([]);
   const [userId] = useState('usuario-123');
   const [isConnected, setIsConnected] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const hasConnected = useRef(false);
+
+  // ✅ Cargar transacciones históricas al iniciar
+  useEffect(() => {
+    const loadExistingTransactions = async () => {
+      try {
+        console.log('📦 Cargando transacciones existentes...');
+        const response = await fetch('http://localhost:3001/transactions');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const transactions = await response.json();
+        console.log(`✅ ${transactions.length} transacciones cargadas`);
+        
+        // Convertir transacciones a eventos del timeline
+        const historicalEvents = transactions.flatMap(transaction => 
+          generateTimelineEventsFromTransaction(transaction)
+        );
+        
+        setEvents(historicalEvents);
+        
+      } catch (error) {
+        console.error('❌ Error cargando transacciones:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadExistingTransactions();
+  }, []);
 
   useEffect(() => {
-    // Conectar WebSocket
-    webSocketService.connect(userId);
-    setIsConnected(true);
+    // ✅ Conectar WebSocket UNA sola vez
+    if (!hasConnected.current) {
+      webSocketService.connect(userId);
+      setIsConnected(true);
+      hasConnected.current = true;
+    }
 
-    // Suscribirse a eventos
+    // ✅ Suscribirse a eventos
     const unsubscribe = webSocketService.onEvent((event) => {
+      console.log('📩 Event received in page.jsx:', event.type);
       setEvents(prev => [...prev, event]);
     });
 
     return () => {
       unsubscribe();
-      webSocketService.disconnect();
-      setIsConnected(false);
     };
   }, [userId]);
+
+  // ✅ FUNCIÓN: Generar eventos desde transacción
+  const generateTimelineEventsFromTransaction = (transaction) => {
+    const events = [
+      {
+        id: `${transaction.transactionId}-initiated`,
+        type: 'TransactionInitiated',
+        transactionId: transaction.transactionId,
+        ts: transaction.createdAt,
+        payload: {
+          fromAccount: transaction.fromAccount,
+          toAccount: transaction.toAccount,
+          amount: transaction.amount,
+          currency: transaction.currency,
+          description: transaction.description
+        }
+      },
+      {
+        id: `${transaction.transactionId}-reserved`,
+        type: 'FundsReserved',
+        transactionId: transaction.transactionId,
+        ts: new Date(new Date(transaction.createdAt).getTime() + 1000),
+        payload: {
+          amount: transaction.amount,
+          currency: transaction.currency
+        }
+      },
+      {
+        id: `${transaction.transactionId}-fraud`,
+        type: 'FraudChecked',
+        transactionId: transaction.transactionId,
+        ts: new Date(new Date(transaction.createdAt).getTime() + 2000),
+        payload: {
+          fraudScore: transaction.fraudScore,
+          risk: transaction.fraudScore > 70 ? 'HIGH' : 'LOW'
+        }
+      }
+    ];
+
+    // Agregar evento final basado en el status
+    if (transaction.status === 'COMPLETED' || transaction.status === 'completed') {
+      events.push({
+        id: `${transaction.transactionId}-completed`,
+        type: 'Committed',
+        transactionId: transaction.transactionId,
+        ts: transaction.updatedAt,
+        payload: { status: 'completed' }
+      });
+      events.push({
+        id: `${transaction.transactionId}-notified`,
+        type: 'Notified',
+        transactionId: transaction.transactionId,
+        ts: new Date(new Date(transaction.updatedAt).getTime() + 1000),
+        payload: { method: 'email' }
+      });
+    } else if (transaction.status === 'REVERSED' || transaction.status === 'reversed') {
+      events.push({
+        id: `${transaction.transactionId}-reversed`,
+        type: 'Reversed',
+        transactionId: transaction.transactionId,
+        ts: transaction.updatedAt,
+        payload: {
+          reason: 'Fraud detected',
+          fraudScore: transaction.fraudScore
+        }
+      });
+    }
+
+    return events;
+  };
 
   const handleSubmit = async (transactionData) => {
     try {
@@ -38,6 +143,7 @@ export default function Home() {
   };
 
   const clearTimeline = () => {
+    console.log('🧹 Limpiando timeline (eventos:', events.length, ')');
     setEvents([]);
   };
 
